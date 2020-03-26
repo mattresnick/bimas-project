@@ -58,7 +58,7 @@ def oja_step(gamma,nu1,nu2,w,dt):
         returns the new synaptic weight at time t+dt, where there is a hard max at 10
     '''
     dw = gamma*(nu1*nu2-w*nu1**2)
-    return min(w+dt*dw,1000) # just in case the weight blows up we cut if off at 10
+    return w+dt*dw # just in case the weight blows up we cut if off at 10
 
 def learn(E,W,f,gamma,dt):
     N = len(E)
@@ -73,21 +73,34 @@ def learn(E,W,f,gamma,dt):
 if __name__ == "__main__":
     # parameters
     N = 50       # network size
-    nu1 = 10     # firing rate of 1st clique
-    nu2 = 13     # firing rate of 2nd clique
-    gamma = 0.4  # learning rate
-    T = 100
-    dt = 0.1
+    nu1 = 1     # firing rate of 1st clique
+    nu2 = 1.5     # firing rate of 2nd clique
+    gamma = 2  # learning rate
+    T = 1000
+    dt = 0.01
     nt = int(T/dt)+1
+    half_n = int(N/2)
 
     W0,E = make_matrix(N)
     f = make_fire_rate(N,nu1,nu2)
-    f2 = make_fire_rate(N,0,nu2)
+    f2 = make_fire_rate(N,nu1/10,nu2)
     W = np.zeros((N,N,nt))
     W[:,:,0] = W0
+    w_avg_1 =  np.zeros((nt,1))
+    w_avg_2 = np.zeros((nt,1))
+    w_avg_1[0] = np.mean(W[:half_n,:half_n,0])
+    w_avg_2[0] = np.mean(W[half_n:,half_n:,0])
     for i in range(1,nt):
         W[:,:,i],E = learn(E,W[:,:,i-1],f,gamma,dt)
-        if i>nt/2:
+        if i>nt/10:
             f = f2
 
+        w_avg_1[i] = np.mean(W[:half_n,:half_n,i])
+        w_avg_2[i] = np.mean(W[half_n:,half_n:,i])
+        
 
+    fig = plt.figure()
+    plt.plot(w_avg_1,label='$w_1$')
+    plt.plot(w_avg_2,label='$w_2$')
+    plt.legend(loc='upper left')
+    plt.show()
