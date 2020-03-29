@@ -13,9 +13,9 @@ def make_matrix(N):
     return edge list
     '''
     half_n = int(N/2)
-    p1 = 0.7
-    p2 = 0.2
-    w = 0.1
+    p1 = 0.5
+    p2 = 0.01
+    w = 1/N
     A = np.zeros((N,N))
     E = []
     for i in range(N):
@@ -58,7 +58,7 @@ def oja_step(gamma,nu1,nu2,w,dt):
         returns the new synaptic weight at time t+dt
     '''
     dw = -w+gamma*(nu1*nu2-w*nu1**2)
-    return max(w+dt*dw,2)
+    return w+dt*dw
 
 def fire_step(tau_r,nu_d,h,w,dt):
     '''
@@ -66,14 +66,14 @@ def fire_step(tau_r,nu_d,h,w,dt):
     '''
     N = len(nu_d.keys())
     nu = np.zeros((N,1))
-    
+    h = np.reshape(h,(len(h),1))
     for i in range(N):
         nu[i] = nu_d[i]
     out_nu = {}
-    nu = nu+dt/tau_r*(-nu+h+w@nu)
+    nu = nu+dt/tau_r*(-nu+(h+w@nu))
  
     for i in range(N):
-        out_nu[i] = max(0,min(nu[i][0],2))
+        out_nu[i] = max(0,min(nu[i],3))
     return out_nu
 
 def inpt_step(tau_m,h,R,I,dt):
@@ -104,15 +104,15 @@ if __name__ == "__main__":
     nu1 = 0     # firing rate of 1st clique
     nu2 = 0     # firing rate of 2nd clique
     gamma = 0.1  # learning rate
-    tau_r = 1
-    tau_m = 1
+    tau_r = 2
+    tau_m = 2
     h1 = 0
     h2 = 0
     I1 = 1
     I2 = 1.5
-    R = 2
+    R = 1
     # time parameters
-    T = 10
+    T = 20
     dt = 0.01
 
     I = np.append(np.repeat(I1,N/2),np.repeat(I2,N/2))
@@ -126,10 +126,13 @@ if __name__ == "__main__":
     w_avg_2 = np.zeros((nt,1))
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
+    f_avg2 = np.zeros((nt,1))
     w_avg_1[0] = np.mean(W[:half_n,:half_n])
     w_avg_2[0] = np.mean(W[half_n:N,half_n:N])
     h_avg[0] = np.mean(h)
     f_avg[0] = np.array(list(f.values())).mean()
+    f_avg2[0] = np.array(list(f.values())).mean()
+    
     for i in range(1,nt):
         W_tmp,E = learn(E,W[:,:],f,gamma,dt)
         f_tmp = fire_step(tau_r,f,h,W,dt)
@@ -141,14 +144,16 @@ if __name__ == "__main__":
         f = f_tmp
         w_avg_1[i] = np.mean(W[:half_n,:half_n])
         w_avg_2[i] = np.mean(W[half_n:,half_n:])
-        h_avg[i] = np.mean(h[0:half_n])
+        h_avg[i] = np.mean(h)
         f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
+        f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
 
     t_ls = np.linspace(0,T,nt)
     fig = plt.figure()
     plt.plot(t_ls,w_avg_1,label='$w_1$')
     plt.plot(t_ls,w_avg_2,label='$w_2$')
     plt.plot(t_ls,h_avg,label='$h$')
-    plt.plot(t_ls,f_avg,label='$\\nu$')
+    plt.plot(t_ls,f_avg,label='$\\nu_1$')
+    plt.plot(t_ls,f_avg2,label='$\\nu_2$')
     plt.legend(loc='upper right')
     plt.show()
