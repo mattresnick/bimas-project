@@ -60,6 +60,27 @@ def oja_step(gamma,nu1,nu2,w,dt):
     dw = -w+gamma*(nu1*nu2-w*nu1**2)
     return w+dt*dw
 
+
+def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
+    '''
+    Oja learning rule solved with forward Euler
+    inpt:
+        eta - learning rate
+        nu1 - firing rate of the pre synaptic neuron
+        nu2- firing rate of the post synaptic neuron
+        w - synaptic weight at time t
+        dt - time step
+        theta - strength threshold
+        tau_t - threshold time update constant
+    oupt:
+        returns the new synaptic weight and strength threshold at time t+dt
+    '''
+    dw = eta*nu1*nu2*(nu2-theta)
+    dtheta = (1/tau_t)*(nu2**2 - theta)
+    
+    return w + dt*dw, theta + dtheta
+
+
 def fire_step(tau_r,nu_d,h,w,dt):
     '''
     
@@ -82,11 +103,16 @@ def inpt_step(tau_m,h,R,I,dt):
     '''
     return h + dt/tau_m*(-h+R*I)
 
-def learn(E,W,f,gamma,dt):
+def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     N = len(E)
     for i in range(N):
         link = E[i]
-        w_tmp = oja_step(gamma,f[link[0]],f[link[1]],link[2],dt)
+        
+        if rule=='oja':
+            w_tmp = oja_step(gamma,f[link[0]],f[link[1]],link[2],dt)
+        elif rule=='bcm':
+            w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
+        
         E[i][2] = w_tmp
         try:
             W[link[0],link[1]] = w_tmp
@@ -104,6 +130,12 @@ if __name__ == "__main__":
     nu1 = 0     # firing rate of 1st clique
     nu2 = 0     # firing rate of 2nd clique
     gamma = 0.1  # learning rate
+    
+    '''For BCM'''
+    theta = 0 #strength threshold
+    tau_t = 10 #threshold time update constant
+    '''-------'''
+    
     tau_r = 2
     tau_m = 2
     h1 = 0
@@ -133,8 +165,10 @@ if __name__ == "__main__":
     f_avg[0] = np.array(list(f.values())).mean()
     f_avg2[0] = np.array(list(f.values())).mean()
     
+    weight_update_rules = ['oja', 'bcm']
+    
     for i in range(1,nt):
-        W_tmp,E = learn(E,W[:,:],f,gamma,dt)
+        W_tmp,E = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f_tmp = fire_step(tau_r,f,h,W,dt)
         h = inpt_step(tau_m,h,R,I,dt)
         if i>=nt/20:
