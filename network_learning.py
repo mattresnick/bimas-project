@@ -1,17 +1,14 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-def roll(p):
-    if np.random.uniform()<p:
-        return 1
-    return 0
-
 def make_matrix(N):
     '''
     Make an adjacency matrix with higher intra connectivity density than inter
     Designed with 2 cliques representing visual/audio cortices
     return edge list
     '''
+    roll = lambda p: int(np.random.uniform()<p)
+    
     half_n = int(N/2)
     p1 = 0.5
     p2 = 0.01
@@ -121,7 +118,7 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             print('f[link[0]]',f[link[0]])
             print('f[link[1]]',f[link[1]])
             print('link[2]',link[2])
-    return W,E
+    return W,E,theta
         
 
 if __name__ == "__main__":
@@ -168,7 +165,7 @@ if __name__ == "__main__":
     weight_update_rules = ['oja', 'bcm']
     
     for i in range(1,nt):
-        W_tmp,E = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
+        W_tmp,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f_tmp = fire_step(tau_r,f,h,W,dt)
         h = inpt_step(tau_m,h,R,I,dt)
         if i>=nt/20:
