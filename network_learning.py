@@ -10,9 +10,9 @@ def make_matrix(N):
     roll = lambda p: int(np.random.uniform()<p)
     
     half_n = int(N/2)
-    p1 = 0.5
-    p2 = 0.01
-    w = 1/N
+    p1 = 0.5 # probability of connecting to node in clique
+    p2 = 0.01 # probability of connecting to node outside clique
+    w = 1/np.sqrt(N) # initial weight between connections
     A = np.zeros((N,N))
     E = []
     for i in range(N):
@@ -20,21 +20,19 @@ def make_matrix(N):
             if (i<=half_n and j<=half_n) or (i>half_n and j>half_n):
                 A[i,j] = roll(p1)
                 if A[i,j] and i!=j:
-                #if i!=j and roll(p1):
                     E.append([i,j,w])
             else:
                 A[i,j] = roll(p2)
                 if A[i,j] and i!=j:
-                #if i!=j and roll(p2):
                     E.append([i,j,w])
                 
-    np.fill_diagonal(A, 0)
+    np.fill_diagonal(A, 0) # no self loops
     W = A*w
     return W,E
 
 def make_fire_rate(N,nu1,nu2):
     '''
-    
+    Initializes the firing rate based on normal dis
     '''
     fire = {}
     for i in range(int(N/2)):
@@ -60,17 +58,7 @@ def oja_step(gamma,nu1,nu2,w,dt):
 
 def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
     '''
-    Oja learning rule solved with forward Euler
-    inpt:
-        eta - learning rate
-        nu1 - firing rate of the pre synaptic neuron
-        nu2- firing rate of the post synaptic neuron
-        w - synaptic weight at time t
-        dt - time step
-        theta - strength threshold
-        tau_t - threshold time update constant
-    oupt:
-        returns the new synaptic weight and strength threshold at time t+dt
+    BCM learning rule step
     '''
     dw = eta*nu1*nu2*(nu2-theta)
     dtheta = (1/tau_t)*(nu2**2 - theta)
@@ -80,7 +68,7 @@ def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
 
 def fire_step(tau_r,nu_d,h,w,dt):
     '''
-    
+    updates the firing rates
     '''
     N = len(nu_d.keys())
     nu = np.zeros((N,1))
@@ -96,11 +84,14 @@ def fire_step(tau_r,nu_d,h,w,dt):
 
 def inpt_step(tau_m,h,R,I,dt):
     '''
-    
+    Update the input voltage on nodes
     '''
     return h + dt/tau_m*(-h+R*I)
 
 def learn(rule,E,W,f,gamma,dt,theta,tau_t):
+    '''
+    update the weights given a rule (BCM or Oja)
+    '''
     N = len(E)
     for i in range(N):
         link = E[i]
@@ -124,8 +115,8 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
 if __name__ == "__main__":
     # parameters
     N = 50       # network size
-    nu1 = 0     # firing rate of 1st clique
-    nu2 = 0     # firing rate of 2nd clique
+    nu1 = 0      # firing rate of 1st clique
+    nu2 = 0      # firing rate of 2nd clique
     gamma = 0.1  # learning rate
     
     '''For BCM'''
@@ -133,23 +124,27 @@ if __name__ == "__main__":
     tau_t = 10 #threshold time update constant
     '''-------'''
     
-    tau_r = 2
-    tau_m = 2
-    h1 = 0
-    h2 = 0
-    I1 = 1
-    I2 = 1.5
-    R = 1
+    tau_r = 2 # firing rate update time constant
+    tau_m = 2 # input update time constant
+    # input voltage the node experiences at time 0
+    h1 = 0   
+    h2 = 0   
+    # Input current 
+    I1 = 1   
+    I2 = 1.5 
+    R = 1 # Resistance
     # time parameters
-    T = 20
-    dt = 0.01
+    T = 20           # end time
+    dt = 0.01        #time step
+    nt = int(T/dt)+1 # number of time steps
 
-    I = np.append(np.repeat(I1,N/2),np.repeat(I2,N/2))
+    # Combine parameters into a single vector for each node
+    I = np.append(np.repeat(I1,N/2),np.repeat(I2,N/2)) 
     h = np.append(np.repeat(h1,N/2),np.repeat(h2,N/2))
-    nt = int(T/dt)+1
+    
     half_n = int(N/2)
     
-    W,E = make_matrix(N)
+    W,E = make_matrix(N) # returns weighted adjacency matrix, and edge list
     f = make_fire_rate(N,nu1,nu2)
     w_avg_1 =  np.zeros((nt,1))
     w_avg_2 = np.zeros((nt,1))
