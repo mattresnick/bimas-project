@@ -148,31 +148,29 @@ if __name__ == "__main__":
     f = make_fire_rate(N,nu1,nu2)
     w_avg_1 =  np.zeros((nt,1))
     w_avg_2 = np.zeros((nt,1))
+    w_avg_3 =  np.zeros((nt,1))
+    w_avg_4 = np.zeros((nt,1))
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
-    w_avg_1[0] = np.mean(W[:half_n,:half_n])
-    w_avg_2[0] = np.mean(W[half_n:N,half_n:N])
-    h_avg[0] = np.mean(h)
-    f_avg[0] = np.array(list(f.values())).mean()
-    f_avg2[0] = np.array(list(f.values())).mean()
     
     weight_update_rules = ['oja', 'bcm']
     
-    for i in range(1,nt):
-        W_tmp,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
-        f_tmp = fire_step(tau_r,f,h,W,dt)
-        h = inpt_step(tau_m,h,R,I,dt)
+    for i in range(nt):
         if i>=nt/20:
             I[:half_n]=0
         
-        W = W_tmp
-        f = f_tmp
-        w_avg_1[i] = np.mean(W[:half_n,:half_n])
-        w_avg_2[i] = np.mean(W[half_n:,half_n:])
+        w_avg_1[i] = np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
+        w_avg_2[i] = np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
+        w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
+        w_avg_4[i] = np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
         h_avg[i] = np.mean(h)
         f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
         f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
+        
+        W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
+        f = fire_step(tau_r,f,h,W,dt)
+        h = inpt_step(tau_m,h,R,I,dt)
 
     t_ls = np.linspace(0,T,nt)
     fig = plt.figure()
