@@ -114,7 +114,7 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
 
 if __name__ == "__main__":
     # parameters
-    N = 50       # network size
+    N = 200       # network size
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
     gamma = 0.1  # learning rate
