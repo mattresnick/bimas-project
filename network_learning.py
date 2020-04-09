@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import networkx as nx
 
 def make_matrix(N):
     '''
@@ -114,7 +115,7 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
 
 if __name__ == "__main__":
     # parameters
-    N = 200       # network size
+    N = 100       # network size
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
     gamma = 0.1  # learning rate
@@ -134,7 +135,7 @@ if __name__ == "__main__":
     I2 = 1.5 
     R = 1 # Resistance
     # time parameters
-    T = 20           # end time
+    T = 30           # end time
     dt = 0.01        #time step
     nt = int(T/dt)+1 # number of time steps
 
@@ -158,14 +159,20 @@ if __name__ == "__main__":
     f_avg2[0] = np.array(list(f.values())).mean()
     
     weight_update_rules = ['oja', 'bcm']
-    
+    graph_steps = list(np.arange(1,nt,int(nt/10)))
+    graph_steps.append(int(nt/20)-1)
+    graph_steps.append(int(nt/20)+3)
+    nz = len(str(nt))
     for i in range(1,nt):
         W_tmp,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f_tmp = fire_step(tau_r,f,h,W,dt)
         h = inpt_step(tau_m,h,R,I,dt)
         if i>=nt/20:
             I[:half_n]=0
-        
+        if i in graph_steps:
+            G = nx.from_numpy_matrix(W)
+            step = str(i).zfill(nz)
+            nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
         W = W_tmp
         f = f_tmp
         w_avg_1[i] = np.mean(W[:half_n,:half_n])
