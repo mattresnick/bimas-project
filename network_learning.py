@@ -181,6 +181,7 @@ if __name__ == "__main__":
     f_avg2 = np.zeros((nt,1))
     
     all_weights = np.zeros((nt,N,N))
+    output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm']
 
@@ -205,6 +206,8 @@ if __name__ == "__main__":
         h_avg[i] = np.mean(h)
         f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
         f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
+        
+        output[i] = np.sum(W@I)
 
         # Gephi output
         if i in graph_steps:
@@ -213,13 +216,20 @@ if __name__ == "__main__":
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
 
     t_ls = np.linspace(0,T,nt)
-    fig = plt.figure()
+    fig, ax = plt.subplots()
     plt.plot(t_ls,w_avg_1,label='$w_1$')
     plt.plot(t_ls,w_avg_2,label='$w_2$')
+    plt.plot(t_ls,w_avg_3,label='$w_3$')
+    plt.plot(t_ls,w_avg_4,label='$w_4$')
     plt.plot(t_ls,h_avg,label='$h$')
     plt.plot(t_ls,f_avg,label='$\\nu_1$')
     plt.plot(t_ls,f_avg2,label='$\\nu_2$')
-    plt.legend(loc='upper right')
+    plt.legend(loc='upper right',bbox_to_anchor=(1.3, 1))
+    
+    ax2=ax.twinx()
+    ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
+    
+    plt.legend(loc='upper right',bbox_to_anchor=(1.355, 0.4))
     plt.show()
     
     neuron_weight_plot(all_weights,save_dir='')
