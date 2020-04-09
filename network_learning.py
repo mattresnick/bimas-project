@@ -111,7 +111,32 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             print('f[link[1]]',f[link[1]])
             print('link[2]',link[2])
     return W,E,theta
-        
+
+
+def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
+    '''
+    Parameters:
+        - weights: (timestep, N, N) array of weights from which to slice and plot.
+        - individual: optional integer, for plotting only one neuron slice.
+        - save: string, if not empty, saves the plots.
+    
+    '''
+    if individual>=0:
+        fig = plt.figure()
+        plt.plot(t_ls,weights[:,individual])
+        plt.title('Neuron #'+f'{individual+1:03}')
+        plt.show()
+        if save_dir: fig.savefig(save_dir+'neuron_'+f'{individual+1:03}'+'_plot.png')
+        return
+    
+    for i in range(weights.shape[1]):
+            fig = plt.figure()
+            plt.plot(t_ls,weights[:,i])
+            plt.title('Neuron #'+f'{i+1:03}')
+            plt.show()
+            if save_dir: fig.savefig(save_dir+'neuron_'+f'{i+1:03}'+'_plot.png')
+    return
+
 
 if __name__ == "__main__":
     # parameters
@@ -149,37 +174,43 @@ if __name__ == "__main__":
     f = make_fire_rate(N,nu1,nu2)
     w_avg_1 =  np.zeros((nt,1))
     w_avg_2 = np.zeros((nt,1))
+    w_avg_3 =  np.zeros((nt,1))
+    w_avg_4 = np.zeros((nt,1))
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
-    w_avg_1[0] = np.mean(W[:half_n,:half_n])
-    w_avg_2[0] = np.mean(W[half_n:N,half_n:N])
-    h_avg[0] = np.mean(h)
-    f_avg[0] = np.array(list(f.values())).mean()
-    f_avg2[0] = np.array(list(f.values())).mean()
+    
+    all_weights = np.zeros((nt,N,N))
     
     weight_update_rules = ['oja', 'bcm']
+
+    # Rate to print graphml files
     graph_steps = list(np.arange(1,nt,int(nt/10)))
     graph_steps.append(int(nt/20)-1)
     graph_steps.append(int(nt/20)+3)
     nz = len(str(nt))
-    for i in range(1,nt):
-        W_tmp,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
-        f_tmp = fire_step(tau_r,f,h,W,dt)
-        h = inpt_step(tau_m,h,R,I,dt)
+    for i in range(nt):
         if i>=nt/20:
             I[:half_n]=0
+        
+        W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
+        f = fire_step(tau_r,f,h,W,dt)
+        h = inpt_step(tau_m,h,R,I,dt)
+        
+        all_weights[i] = W
+        w_avg_1[i] = np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
+        w_avg_2[i] = np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
+        w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
+        w_avg_4[i] = np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
+        h_avg[i] = np.mean(h)
+        f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
+        f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
+
+        # Gephi output
         if i in graph_steps:
             G = nx.from_numpy_matrix(W)
             step = str(i).zfill(nz)
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
-        W = W_tmp
-        f = f_tmp
-        w_avg_1[i] = np.mean(W[:half_n,:half_n])
-        w_avg_2[i] = np.mean(W[half_n:,half_n:])
-        h_avg[i] = np.mean(h)
-        f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
-        f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
 
     t_ls = np.linspace(0,T,nt)
     fig = plt.figure()
@@ -190,3 +221,5 @@ if __name__ == "__main__":
     plt.plot(t_ls,f_avg2,label='$\\nu_2$')
     plt.legend(loc='upper right')
     plt.show()
+    
+    neuron_weight_plot(all_weights,save_dir='')
