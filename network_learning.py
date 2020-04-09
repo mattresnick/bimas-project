@@ -110,7 +110,32 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             print('f[link[1]]',f[link[1]])
             print('link[2]',link[2])
     return W,E,theta
-        
+
+
+def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
+    '''
+    Parameters:
+        - weights: (timestep, N, N) array of weights from which to slice and plot.
+        - individual: optional integer, for plotting only one neuron slice.
+        - save: string, if not empty, saves the plots.
+    
+    '''
+    if individual>=0:
+        fig = plt.figure()
+        plt.plot(t_ls,weights[:,individual])
+        plt.title('Neuron #'+f'{individual+1:03}')
+        plt.show()
+        if save_dir: fig.savefig(save_dir+'neuron_'+f'{individual+1:03}'+'_plot.png')
+        return
+    
+    for i in range(weights.shape[1]):
+            fig = plt.figure()
+            plt.plot(t_ls,weights[:,i])
+            plt.title('Neuron #'+f'{i+1:03}')
+            plt.show()
+            if save_dir: fig.savefig(save_dir+'neuron_'+f'{i+1:03}'+'_plot.png')
+    return
+
 
 if __name__ == "__main__":
     # parameters
@@ -154,12 +179,19 @@ if __name__ == "__main__":
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
     
+    all_weights = np.zeros((nt,N,N))
+    
     weight_update_rules = ['oja', 'bcm']
     
     for i in range(nt):
         if i>=nt/20:
             I[:half_n]=0
         
+        W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
+        f = fire_step(tau_r,f,h,W,dt)
+        h = inpt_step(tau_m,h,R,I,dt)
+        
+        all_weights[i] = W
         w_avg_1[i] = np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
         w_avg_2[i] = np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
         w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
@@ -167,10 +199,6 @@ if __name__ == "__main__":
         h_avg[i] = np.mean(h)
         f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
         f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
-        
-        W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
-        f = fire_step(tau_r,f,h,W,dt)
-        h = inpt_step(tau_m,h,R,I,dt)
 
     t_ls = np.linspace(0,T,nt)
     fig = plt.figure()
@@ -181,3 +209,5 @@ if __name__ == "__main__":
     plt.plot(t_ls,f_avg2,label='$\\nu_2$')
     plt.legend(loc='upper right')
     plt.show()
+    
+    neuron_weight_plot(all_weights,save_dir='')
