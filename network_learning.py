@@ -186,6 +186,7 @@ if __name__ == "__main__":
     weight_update_rules = ['oja', 'bcm']
 
     # Rate to print graphml files
+    output_gephi = False
     graph_steps = list(np.arange(1,nt,int(nt/10)))
     graph_steps.append(int(nt/20)-1)
     graph_steps.append(int(nt/20)+3)
@@ -210,7 +211,7 @@ if __name__ == "__main__":
         output[i] = np.sum(W@I)
 
         # Gephi output
-        if i in graph_steps:
+        if output_gephi and i in graph_steps:
             G = nx.from_numpy_matrix(W)
             step = str(i).zfill(nz)
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
