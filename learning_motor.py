@@ -155,7 +155,7 @@ if __name__ == "__main__":
     gamma = 0.1  # learning rate
     
     '''For BCM'''
-    theta = 0 #strength threshold
+    theta = 3 #strength threshold
     tau_t = 10 #threshold time update constant
     '''-------'''
     
@@ -171,7 +171,7 @@ if __name__ == "__main__":
     I3 = 0 
     R = 1 # Resistance
     # time parameters
-    T = 30           # end time
+    T = 20           # end time
     dt = 0.01        #time step
     nt = int(T/dt)+1 # number of time steps
 
@@ -240,26 +240,33 @@ if __name__ == "__main__":
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
 
     t_ls = np.linspace(0,T,nt)
-    fig, ax = plt.subplots()
-    plt.plot(t_ls,w_avg_1,label='$w_1$')
-    plt.plot(t_ls,w_avg_2,label='$w_2$')
-    plt.plot(t_ls,w_avg_3,label='$w_3$')
-    plt.plot(t_ls,w_avg_4,label='$w_4$')
-    plt.plot(t_ls,w_avg_5,label='$w_5$')
-    plt.plot(t_ls,w_avg_6,label='$w_6$')
-    plt.plot(t_ls,w_avg_7,label='$w_7$')
-    plt.plot(t_ls,w_avg_8,label='$w_8$')
-    plt.plot(t_ls,w_avg_9,label='$w_9$')
-    plt.plot(t_ls,h_avg,label='$h$')
-    plt.plot(t_ls,f_avg,label='$\\nu_1$')
-    plt.plot(t_ls,f_avg2,label='$\\nu_2$')
-    plt.plot(t_ls,f_avg3,label='$\\nu_3$')
-    plt.legend(loc='upper right',bbox_to_anchor=(1.3, 1))
+    fig, ax = plt.subplots(2,2)
+    ax[0,0].plot(t_ls,w_avg_1,label='$w_{1,1}$')
+    ax[0,0].plot(t_ls,w_avg_5,label='$w_{2,2}$')
+    ax[0,0].plot(t_ls,w_avg_9,label='$w_{3,3}$')
+    ax[0,0].legend(loc='upper left')
+    ax[0,0].set_title('Intracortical Weights')
+
+    ax[1,0].plot(t_ls,w_avg_2,label='$w_{1,2}$')
+    ax[1,0].plot(t_ls,w_avg_3,label='$w_{1,3}$')
+    ax[1,0].plot(t_ls,w_avg_4,label='$w_{2,1}$')
+    ax[1,0].plot(t_ls,w_avg_6,label='$w_{2,3}$')
+    ax[1,0].plot(t_ls,w_avg_7,label='$w_{3,1}$')
+    ax[1,0].plot(t_ls,w_avg_8,label='$w_{3,2}$')
+    ax[1,0].legend(loc='upper left')
+    ax[1,0].set_title('Intercortical Weights')
     
-    ax2=ax.twinx()
-    ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
+    #plt.plot(t_ls,h_avg,label='$h$')
+    ax[0,1].plot(t_ls,f_avg,label='$\\nu_1$')
+    ax[0,1].plot(t_ls,f_avg2,label='$\\nu_2$')
+    ax[0,1].plot(t_ls,f_avg3,label='$\\nu_3$')
+    ax[0,1].legend(loc='upper right')
+    ax[0,1].set_title('Firing Rate Averages In Each Cortex')
     
-    plt.legend(loc='upper right',bbox_to_anchor=(1.355, 0.4))
+    #ax2=ax.twinx()
+    ax[1,1].plot(t_ls,output,color='black',linewidth=2,label='output') 
+    ax[1,1].legend(loc='upper left')
+    ax[1,1].set_title('Output')
     plt.show()
     
     #neuron_weight_plot(all_weights,save_dir='')
