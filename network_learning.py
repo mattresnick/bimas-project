@@ -35,7 +35,7 @@ def make_fire_rate(N,nu1,nu2):
     '''
     Initializes the firing rate based on normal dis
     '''
-    fire = {}
+    fire = np.zeros((N,1))
     for i in range(int(N/2)):
         fire[i] = max(0,np.random.normal(nu1))
         fire[i+int(N/2)] = max(0,np.random.normal(nu2))
@@ -67,16 +67,17 @@ def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
     return w + dt*dw, theta + dtheta
 
 
-def fire_step(tau_r,nu_d,h,w,dt):
+def fire_step(tau_r,nu,h,w,dt):
     '''
     updates the firing rates
     '''
-    N = len(nu_d.keys())
-    nu = np.zeros((N,1))
+    #N = len(nu_d.keys())
+    #nu = np.zeros((N,1))
     h = np.reshape(h,(len(h),1))
-    for i in range(N):
-        nu[i] = nu_d[i]
-    out_nu = {}
+    # for i in range(N):
+    #     nu[i] = nu_d[i]
+    # out_nu = {}
+    out_nu = np.zeros((len(nu),1))
     nu = nu+dt/tau_r*(-nu+(h+w@nu))
  
     for i in range(N):
@@ -205,10 +206,10 @@ if __name__ == "__main__":
         w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
         w_avg_4[i] = np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
         h_avg[i] = np.mean(h)
-        f_avg[i] = np.array(list(f.values())[0:half_n]).mean()
-        f_avg2[i] = np.array(list(f.values())[half_n:]).mean()
+        f_avg[i] = f[0:half_n].mean()
+        f_avg2[i] = f[half_n:].mean()
         
-        output[i] = np.sum(W@I)
+        output[i] = np.sum(W@f)
 
         # Gephi output
         if output_gephi and i in graph_steps:
@@ -233,4 +234,4 @@ if __name__ == "__main__":
     plt.legend(loc='upper right',bbox_to_anchor=(1.355, 0.4))
     plt.show()
     
-    neuron_weight_plot(all_weights,save_dir='')
+    #neuron_weight_plot(all_weights,save_dir='')
