@@ -125,9 +125,9 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
         elif rule=='bcm':
             w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
         elif rule=='cov':
-            w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t,f)
+            w_tmp, theta = cov_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t,f)
         elif rule=='pattern':
-            w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
+            w_tmp, theta = pattern_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
         
         E[i][2] = w_tmp
         try:
