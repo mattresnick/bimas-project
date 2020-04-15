@@ -35,11 +35,15 @@ def make_fire_rate(N,nu1,nu2):
     '''
     Initializes the firing rate based on normal dis
     '''
-    fire = np.zeros((N,1))
-    for i in range(int(N/2)):
-        fire[i] = max(0,np.random.normal(nu1))
-        fire[i+int(N/2)] = max(0,np.random.normal(nu2))
-    return fire
+    stddev = 1 # Standard deviation of firing rate (mean is nu1, nu2)
+    
+    min_val = 0 # Minimum firing rate
+    max_val = None # Maximum firing rate
+    
+    fire1 = np.clip(np.random.normal(loc=nu1,scale=stddev,size=int(N/2)),a_min=min_val,a_max=max_val)
+    fire2 = np.clip(np.random.normal(loc=nu2,size=int(N/2)),a_min=min_val,a_max=max_val)
+    
+    return np.hstack((fire1,fire2))
 
 def oja_step(gamma,nu1,nu2,w,dt):
     '''
@@ -67,22 +71,40 @@ def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
     return w + dt*dw, theta + dtheta
 
 
+def cov_step(eta,nu1,nu2,w,dt,nuk):
+    '''
+    Covariance update rule.
+    '''
+    nhalf = int(len(nuk)/2)
+    mean_nu1, mean_nu2 = np.mean(nuk[:nhalf]), np.mean(nuk[nhalf:])
+    dw = eta*(nu1-mean_nu1)*(nu2-mean_nu2)
+    return w + dt*dw
+
+
+def pattern_step(eta,nu1,nu2,w,dt):
+    '''
+    Pattern update rule. 
+    This is the simplest but most time efficient weight update rule.
+    '''
+    dw = eta*nu1*(nu2-w)
+    return w + dt*dw
+
+
+
 def fire_step(tau_r,nu,h,w,dt):
     '''
     updates the firing rates
     '''
-    #N = len(nu_d.keys())
-    #nu = np.zeros((N,1))
-    h = np.reshape(h,(len(h),1))
-    # for i in range(N):
-    #     nu[i] = nu_d[i]
-    # out_nu = {}
-    out_nu = np.zeros((len(nu),1))
-    nu = nu+dt/tau_r*(-nu+(h+w@nu))
- 
-    for i in range(N):
-        out_nu[i] = max(0,min(nu[i],3))
-    return out_nu
+    sigmoid = lambda x: 1/(1+np.exp(-x))
+    N = len(h)
+    
+    h_ = np.reshape(h,(N,1))
+    nu_ = np.reshape(nu,(N,1))
+    raw_out = np.reshape(sigmoid(w@nu),(N,1))
+    
+    nu = nu_+(dt/tau_r)*((-1)*nu_+(h_+raw_out))
+    
+    return np.clip(nu,0,3)
 
 def inpt_step(tau_m,h,R,I,dt):
     '''
@@ -102,6 +124,10 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             w_tmp = oja_step(gamma,f[link[0]],f[link[1]],link[2],dt)
         elif rule=='bcm':
             w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
+        elif rule=='cov':
+            w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t,f)
+        elif rule=='pattern':
+            w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
         
         E[i][2] = w_tmp
         try:
@@ -112,6 +138,18 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             print('f[link[1]]',f[link[1]])
             print('link[2]',link[2])
     return W,E,theta
+
+
+def input_manipulation(rule,I,i,nt,shutoff_time):
+    if rule=='fixed shutoff':
+        if i>=nt*shutoff_time:
+            I[:half_n]=0
+    elif rule=='sin':
+        pass
+    elif rule=='cos':           
+        pass
+    
+    return I
 
 
 def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
@@ -158,7 +196,9 @@ if __name__ == "__main__":
     h2 = 0   
     # Input current 
     I1 = 1   
-    I2 = 1.5 
+    I2 = 1.5
+    shutoff_time = 0.25 # % of the way through training when input is shut off.
+    
     R = 1 # Resistance
     # time parameters
     T = 30           # end time
@@ -184,7 +224,8 @@ if __name__ == "__main__":
     all_weights = np.zeros((nt,N,N))
     output = np.zeros((nt,1))
     
-    weight_update_rules = ['oja', 'bcm']
+    weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
+    input_rules = ['fixed shutoff','sin','cos']
 
     # Rate to print graphml files
     output_gephi = False
@@ -193,8 +234,9 @@ if __name__ == "__main__":
     graph_steps.append(int(nt/20)+3)
     nz = len(str(nt))
     for i in range(nt):
-        if i>=nt/20:
-            I[:half_n]=0
+        print ('\rCompletion: ' + f'{round(((i+1)/nt)*100,2):0>2}', end='')
+        
+        I = input_manipulation(input_rules[0],I,i,nt,shutoff_time)
         
         W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f = fire_step(tau_r,f,h,W,dt)
@@ -206,7 +248,7 @@ if __name__ == "__main__":
         w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
         w_avg_4[i] = np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
         h_avg[i] = np.mean(h)
-        f_avg[i] = f[0:half_n].mean()
+        f_avg[i] = f[:half_n].mean()
         f_avg2[i] = f[half_n:].mean()
         
         output[i] = np.sum(W@f)
@@ -218,7 +260,7 @@ if __name__ == "__main__":
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
 
     t_ls = np.linspace(0,T,nt)
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(12,7))
     plt.plot(t_ls,w_avg_1,label='$w_1$')
     plt.plot(t_ls,w_avg_2,label='$w_2$')
     plt.plot(t_ls,w_avg_3,label='$w_3$')
