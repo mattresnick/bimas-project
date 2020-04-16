@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 
+np.random.seed(seed=1)
+
 def make_matrix(c_size):
     '''
     Make an adjacency matrix with higher intra connectivity density than inter
