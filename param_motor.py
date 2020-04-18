@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+import time
 
 np.random.seed(seed=1)
 
@@ -42,12 +43,16 @@ def make_fire_rate(N,nu1,nu2,nu3):
     '''
     Initializes the firing rate based on normal dis
     '''
-    fire = np.zeros((N*3,1))
-    for i in range(N):
-        fire[i] = max(0,np.random.normal(nu1))
-        fire[i+N] = max(0,np.random.normal(nu2))
-        fire[i+2*N] = max(0,np.random.normal(nu3))
-    return fire
+    stddev = 1 # Standard deviation of firing rate (mean is nu1, nu2)
+    
+    min_val = 0 # Minimum firing rate
+    max_val = None # Maximum firing rate
+    
+    fire1 = np.clip(np.random.normal(loc=nu1,scale=stddev,size=int(N)),a_min=min_val,a_max=max_val)
+    fire2 = np.clip(np.random.normal(loc=nu2,size=int(N)),a_min=min_val,a_max=max_val)
+    fire3 = np.clip(np.random.normal(loc=nu2,size=int(N)),a_min=min_val,a_max=max_val)
+
+    return np.hstack((fire1,fire2,fire3))
 
 def oja_step(gamma,nu1,nu2,w,dt):
     '''
@@ -64,33 +69,47 @@ def oja_step(gamma,nu1,nu2,w,dt):
     dw = -w+gamma*(nu1*nu2-w*nu1**2)
     return w+dt*dw
 
-
 def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
     '''
     BCM learning rule step
     '''
-    dw = eta*nu1*nu2*(nu2-theta)
+    sigmoid = lambda x: 1/(1+np.exp(-x))
+    dw = sigmoid(eta*nu1*nu2*(nu2-theta))
     dtheta = (1/tau_t)*(nu2**2 - theta)
     
     return w + dt*dw, theta + dtheta
+
+def cov_step(eta,nu1,nu2,w,dt,nuk):
+    '''
+    Covariance update rule.
+    '''
+    nhalf = int(len(nuk)/2)
+    mean_nu1, mean_nu2 = np.mean(nuk[:nhalf]), np.mean(nuk[nhalf:])
+    dw = eta*(nu1-mean_nu1)*(nu2-mean_nu2)
+    return w + dt*dw
+
+def pattern_step(eta,nu1,nu2,w,dt):
+    '''
+    Pattern update rule. 
+    This is the simplest but most time efficient weight update rule.
+    '''
+    dw = eta*nu1*(nu2-w)
+    return w + dt*dw
 
 
 def fire_step(tau_r,nu,h,w,dt):
     '''
     updates the firing rates
     '''
-    #N = len(nu_d.keys())
-    #nu = np.zeros((N,1))
-    h = np.reshape(h,(len(h),1))
-    # for i in range(N):
-    #     nu[i] = nu_d[i]
-    # out_nu = {}
-    out_nu = np.zeros((len(nu),1))
-    nu = nu+dt/tau_r*(-nu+(h+w@nu))
-    N = len(nu)
-    for i in range(N):
-        out_nu[i] = max(0,min(nu[i],3))
-    return out_nu
+    sigmoid = lambda x: 1/(1+np.exp(-x))
+    N = len(h)
+    h_ = np.reshape(h,(N,1))
+    nu_ = np.reshape(nu,(N,1))
+    raw_out = np.reshape(sigmoid(w@nu),(N,1))
+    
+    nu = nu_+(dt/tau_r)*((-1)*nu_+(h_+raw_out))
+    
+    return np.clip(nu,0,3)
 
 def inpt_step(tau_m,h,R,I,dt):
     '''
@@ -105,11 +124,14 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     N = len(E)
     for i in range(N):
         link = E[i]
-        
         if rule=='oja':
             w_tmp = oja_step(gamma,f[link[0]],f[link[1]],link[2],dt)
         elif rule=='bcm':
             w_tmp, theta = bcm_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
+        elif rule=='cov':
+            w_tmp, theta = cov_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t,f)
+        elif rule=='pattern':
+            w_tmp, theta = pattern_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
         
         E[i][2] = w_tmp
         try:
@@ -146,7 +168,7 @@ def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
             if save_dir: fig.savefig(save_dir+'neuron_'+f'{i+1:03}'+'_plot.png')
     return
 
-def run_sim(tau_r,tau_m):
+def run_sim(W,E,tau_r,tau_m):
     # parameters
     c_size = 20  # size of each clique
     N = c_size*3 # network size
@@ -160,8 +182,8 @@ def run_sim(tau_r,tau_m):
     tau_t = 10 #threshold time update constant
     '''-------'''
     
-    # tau_r = 2 # firing rate update time constant
-    # tau_m = 2 # input update time constant
+    tau_r = 2 # firing rate update time constant
+    tau_m = 2 # input update time constant
     # input voltage the node experiences at time 0
     h1 = 0   
     h2 = 0   
@@ -172,22 +194,22 @@ def run_sim(tau_r,tau_m):
     I3 = 0 
     R = 1 # Resistance
     # time parameters
-    T = 20           # end time
-    dt = 0.01        #time step
+    T = 10           # end time
+    dt = 0.1         #time step
     nt = int(T/dt)+1 # number of time steps
 
     # Combine parameters into a single vector for each node
     I = np.concatenate((np.repeat(I1,c_size),np.repeat(I2,c_size),np.repeat(I3,c_size))) 
     h = np.concatenate((np.repeat(h1,c_size),np.repeat(h2,c_size),np.repeat(h3,c_size)))
         
-    W,E = make_matrix(c_size) # returns weighted adjacency matrix, and edge list
+    # W,E = make_matrix(c_size) # returns weighted adjacency matrix, and edge list
     f = make_fire_rate(c_size,nu1,nu2,nu3)
-    
+
     output = np.zeros((nt,1))
     weight_update_rules = ['oja', 'bcm']
 
     for i in range(nt):
-        if i>=nt/20:
+        if i>=nt/10:
             I[:c_size]=0
         
         W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
@@ -198,7 +220,8 @@ def run_sim(tau_r,tau_m):
     return output[-1][0]
 
 if __name__ == "__main__":
-    grid_num = 50
+    W,E = make_matrix(20) 
+    grid_num = 20
     # tau_m
     tau_m_min = 0.5
     tau_m_max = 5
@@ -213,10 +236,20 @@ if __name__ == "__main__":
     x,y =  np.mgrid[slice(tau_r_min, tau_r_max+dtr, dtr),
                     slice(tau_m_min, tau_m_max+dtm, dtm)]
     z = []
+    n=grid_num**2
+    cnt = 0
     for i in tau_r_range:
         for j in tau_m_range:
-            o = run_sim(i,j)
+            # start = time.time()
+            cnt+=1
+            o = run_sim(W,E,i,j)
             z.append(o)
+            if not cnt%100:
+                print(cnt/n)
+            # end = time.time()
+            # print(end - start)
+            # print((end - start)*n)
+            # exit()
     z = np.reshape(z, (x.shape))
     z_min, z_max = z.min(), z.max()
     c = plt.pcolormesh(x,y,z, cmap='RdBu', vmin=z_min, vmax=z_max)
