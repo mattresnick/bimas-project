@@ -100,11 +100,11 @@ def fire_step(tau_r,nu,h,w,dt):
     
     h_ = np.reshape(h,(N,1))
     nu_ = np.reshape(nu,(N,1))
-    raw_out = np.reshape(sigmoid(w@nu),(N,1))
-    
-    nu = nu_+(dt/tau_r)*((-1)*nu_+(h_+raw_out))
-    
-    return np.clip(nu,0,3)
+    raw_out = np.reshape(sigmoid((w@nu_)+h_),(N,1))
+
+    nu = nu_+(dt/tau_r)*(-nu_+raw_out)
+
+    return nu
 
 def inpt_step(tau_m,h,R,I,dt):
     '''
@@ -179,14 +179,14 @@ def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
 
 if __name__ == "__main__":
     # parameters
-    N = 100       # network size
+    N = 40       # network size
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
     gamma = 0.1  # learning rate
     
     '''For BCM'''
-    theta = 0 #strength threshold
-    tau_t = 10 #threshold time update constant
+    theta = 0.5 #strength threshold
+    tau_t = 1 #threshold time update constant
     '''-------'''
     
     tau_r = 2 # firing rate update time constant
@@ -195,8 +195,8 @@ if __name__ == "__main__":
     h1 = 0   
     h2 = 0   
     # Input current 
-    I1 = 1   
-    I2 = 1.5
+    I1 = 4   
+    I2 = 3
     shutoff_time = 0.25 # % of the way through training when input is shut off.
     
     R = 1 # Resistance
@@ -243,10 +243,10 @@ if __name__ == "__main__":
         h = inpt_step(tau_m,h,R,I,dt)
         
         all_weights[i] = W
-        w_avg_1[i] = np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
-        w_avg_2[i] = np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
-        w_avg_3[i] = np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
-        w_avg_4[i] = np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
+        w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() #np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
+        w_avg_2[i] = W[half_n:,half_n:][np.nonzero(W[half_n:,half_n:])].mean() #np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
+        w_avg_3[i] = W[:half_n,half_n:][np.nonzero(W[:half_n,half_n:])].mean() #np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
+        w_avg_4[i] = W[half_n:,:half_n][np.nonzero(W[half_n:,:half_n])].mean() #np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
         h_avg[i] = np.mean(h)
         f_avg[i] = f[:half_n].mean()
         f_avg2[i] = f[half_n:].mean()
@@ -258,22 +258,23 @@ if __name__ == "__main__":
             G = nx.from_numpy_matrix(W)
             step = str(i).zfill(nz)
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
-
+    print('')
+    
     t_ls = np.linspace(0,T,nt)
     fig, ax = plt.subplots(figsize=(12,7))
-    plt.plot(t_ls,w_avg_1,label='$w_1$')
-    plt.plot(t_ls,w_avg_2,label='$w_2$')
-    plt.plot(t_ls,w_avg_3,label='$w_3$')
-    plt.plot(t_ls,w_avg_4,label='$w_4$')
+    plt.plot(t_ls,w_avg_1,label='$w_{1,1}$')
+    plt.plot(t_ls,w_avg_2,label='$w_{1,2}$')
+    plt.plot(t_ls,w_avg_3,label='$w_{2,1}$')
+    plt.plot(t_ls,w_avg_4,label='$w_{2,2}$')
     plt.plot(t_ls,h_avg,label='$h$')
     plt.plot(t_ls,f_avg,label='$\\nu_1$')
     plt.plot(t_ls,f_avg2,label='$\\nu_2$')
-    plt.legend(loc='upper right',bbox_to_anchor=(1.3, 1))
+    plt.legend(loc='upper right')
     
     ax2=ax.twinx()
     ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
     
-    plt.legend(loc='upper right',bbox_to_anchor=(1.355, 0.4))
+    plt.legend(loc='upper right')
     plt.show()
     
     #neuron_weight_plot(all_weights,save_dir='')
