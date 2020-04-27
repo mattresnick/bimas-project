@@ -2,34 +2,59 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 
-def make_matrix(N):
+def make_matrix(N, intra_prob=0.7, inter_prob = 0.25):
     '''
-    Make an adjacency matrix with higher intra connectivity density than inter
-    Designed with 2 cliques representing visual/audio cortices
-    return edge list
-    '''
-    roll = lambda p: int(np.random.uniform()<p)
+    Make an adjacency matrix with higher intra connectivity density than inter.
+    Designed with 2 cliques representing visual/audio cortices.
     
-    half_n = int((N-10)/2)
-    p1 = 0.5 # probability of connecting to node in clique
-    p2 = 0.01 # probability of connecting to node outside clique
-    w = 1/np.sqrt(N) # initial weight between connections
-    A = np.zeros((N,N))
+    Paramters:
+        - N: (int) Number of neurons in the entire population.
+        - intra_prob: (float) probability for intracortical connection 0<p<1
+        - inter_prob: (float) probability for intercortical connection 0<p<1, and should be less than intra_prob.
+    
+    Returns:
+        - W: (2D ndarray) Weighted edge matrix for neuron population.
+        - E: (2D ndarray) List of connection indices and corresponding weight values for efficient updates during learning.
+    
+    Where A=intra, E=inter, the weight regimes are structured as:
+    
+    A | E
+    --+--
+    E | A
+    
+    '''
+    half_n = int(N/2)
+    
+    # Initize weights as uniform sampling from 0 to 1.
+    W = np.random.uniform(0,1,(N,N)) 
+    
+    connection_masks = []
+    for i in range(4):
+        # Initialize random neuron connection values.
+        W_connection = np.random.uniform(0,1,(half_n,half_n))
+        
+        # Make connection masks, with connection probability 0.5 or 0.05,
+        # depending on the regime.
+        prob = inter_prob
+        if not i%3: prob = intra_prob
+        connection_masks.append((W_connection<prob)*W_connection)
+    
+    # Construct the mask from all 4 regimes.
+    top_half_mask = np.hstack((connection_masks[0],connection_masks[1]))
+    bottom_half_mask = np.hstack((connection_masks[2],connection_masks[3]))
+    full_mask = np.vstack((top_half_mask, bottom_half_mask))
+    
+    # Mask the weights and zero the diagonal to remove self-loops.
+    W = full_mask
+    np.fill_diagonal(W, 0)
+    
     E = []
-    for i in range(N):
-        for j in range(N):
-            if (i<=half_n and j<=half_n) or (i>half_n and j>half_n):
-                A[i,j] = roll(p1)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
-            else:
-                A[i,j] = roll(p2)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
-                
-    np.fill_diagonal(A, 0) # no self loops
-    W = A*w
-    return W,E
+    I,J = W.shape
+    for i in range(I):
+        for j in range(J):
+            E.append(np.array([i,j,W[i][j]]))
+    
+    return W, np.array(E)
 
 def make_fire_rate(N,nu1,nu2):
     '''
@@ -100,7 +125,7 @@ def fire_step(tau_r,nu,h,w,dt):
     
     h_ = np.reshape(h,(N,1))
     nu_ = np.reshape(nu,(N,1))
-    raw_out = np.reshape(sigmoid((w@nu_)+h_),(N,1))
+    raw_out = np.reshape(sigmoid((w@nu_)*h_),(N,1))
 
     nu = nu_+(dt/tau_r)*(-nu_+raw_out)
 
