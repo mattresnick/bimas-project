@@ -140,6 +140,41 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     return W,E,theta
 
 
+def weightBalance(W, i, N):
+    half_n = int(N/2)
+    
+    # Determine the regime of the dying neuron, and hence 
+    # which regime the weight should be siphoned to.
+    if i<int(N/2):
+        old_regime = W[i][:half_n]
+        new_regime = W[half_n:,half_n:]
+        add_to = half_n
+        add_from = 0
+    else:
+        old_regime = W[i][half_n:]
+        new_regime = W[:half_n,:half_n]
+        add_to = 0
+        add_from = half_n
+    
+    # Find locations with weights from dying neuron, and locations of 
+    # dead neurons in the other regime.
+    nonzero_locs = np.where(old_regime!=0)[0]
+    zero_locs = np.where(new_regime==0)
+    zero_locs = list(zip(zero_locs[0],zero_locs[1]))
+    
+    if len(zero_locs)>0 and len(nonzero_locs)>0:
+        # Randomly select a neuron to kill
+        j_f = nonzero_locs[np.random.randint(len(nonzero_locs))]
+        
+        # Randomly select a neuron in the other regime to activate
+        i_t, j_t = zero_locs[np.random.randint(len(zero_locs))]
+        
+        W[i_t+add_to][j_t+add_to] = W[i][j_f]
+        W[i][j_f+add_from] = 0
+    
+    return W
+
+
 def input_manipulation(rule,I,i,nt,shutoff_time):
     if rule=='fixed shutoff':
         if i>=nt*shutoff_time:
@@ -252,7 +287,16 @@ if __name__ == "__main__":
         f_avg2[i] = f[half_n:].mean()
         
         output[i] = np.sum(W@f)
-
+        
+        # Global weight siphon rule.
+        if any(f<0.75):
+            siphon_chance = 0.0005
+            for i, fr in enumerate(f):
+                if fr<0.75:
+                    if np.random.uniform(0,1)<siphon_chance:
+                        W = weightBalance(W, i, N)
+        
+        
         # Gephi output
         if output_gephi and i in graph_steps:
             G = nx.from_numpy_matrix(W)
