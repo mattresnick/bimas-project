@@ -2,26 +2,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
 
-def make_matrix(N):
+def make_matrix(N,Ni):
     '''
     Make an adjacency matrix with higher intra connectivity density than inter
     Designed with 2 cliques representing visual/audio cortices
     return edge list
     '''
     roll = lambda p: int(np.random.uniform()<p)
-    
-    half_n = int((N-10)/2)
-    p1 = 0.5 # probability of connecting to node in clique
-    p2 = 0.01 # probability of connecting to node outside clique
+    Nt = N+Ni
+    half_n = int((N)/2)
+    p1 = 0.6 # probability of connecting to node in clique
+    p2 = 0.1 # probability of connecting to node outside clique
+    p3 = 0.3 # probability of connecting to node outside clique
     w = 1/np.sqrt(N) # initial weight between connections
-    A = np.zeros((N,N))
+    A = np.zeros((Nt,Nt))
     E = []
-    for i in range(N):
-        for j in range(N):
-            if (i<=half_n and j<=half_n) or (i>half_n and j>half_n):
+    for i in range(Nt):
+        for j in range(Nt):
+            if (i<=half_n and j<=half_n) or (i>half_n and j>half_n and i<=N and j<=N):
                 A[i,j] = roll(p1)
                 if A[i,j] and i!=j:
                     E.append([i,j,w])
+            elif (i>N and j>N):
+                A[i,j] = roll(p1)/(2*w)
+            elif (i>N and j<=N) or (i<=N and j>N):
+                A[i,j] = -roll(p1)/(2*w)
             else:
                 A[i,j] = roll(p2)
                 if A[i,j] and i!=j:
@@ -31,7 +36,7 @@ def make_matrix(N):
     W = A*w
     return W,E
 
-def make_fire_rate(N,nu1,nu2):
+def make_fire_rate(N,Ni,nu1,nu2,nui):
     '''
     Initializes the firing rate based on normal dis
     '''
@@ -42,8 +47,8 @@ def make_fire_rate(N,nu1,nu2):
     
     fire1 = np.clip(np.random.normal(loc=nu1,scale=stddev,size=int(N/2)),a_min=min_val,a_max=max_val)
     fire2 = np.clip(np.random.normal(loc=nu2,size=int(N/2)),a_min=min_val,a_max=max_val)
-    
-    return np.hstack((fire1,fire2))
+    fire3 = np.clip(np.random.normal(loc=nui,size=int(Ni)),a_min=min_val,a_max=max_val)
+    return np.hstack((fire1,fire2,fire3))
 
 def oja_step(gamma,nu1,nu2,w,dt):
     '''
@@ -179,9 +184,12 @@ def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
 
 if __name__ == "__main__":
     # parameters
-    N = 40       # network size
+    N = 60       # network size
+    Ni = 20
+    Nt = N+Ni
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
+    nui = 1      # firing rate of 2nd clique
     gamma = 0.1  # learning rate
     
     '''For BCM'''
@@ -193,10 +201,12 @@ if __name__ == "__main__":
     tau_m = 2 # input update time constant
     # input voltage the node experiences at time 0
     h1 = 0   
-    h2 = 0   
+    h2 = 0 
+    hi = 0  
     # Input current 
     I1 = 10   
     I2 = 9
+    Ii = 1
     shutoff_time = 0.25 # % of the way through training when input is shut off.
     
     R = 1 # Resistance
@@ -206,13 +216,13 @@ if __name__ == "__main__":
     nt = int(T/dt)+1 # number of time steps
 
     # Combine parameters into a single vector for each node
-    I = np.append(np.repeat(I1,N/2),np.repeat(I2,N/2)) 
-    h = np.append(np.repeat(h1,N/2),np.repeat(h2,N/2))
+    I = np.concatenate((np.repeat(I1,N/2),np.repeat(I2,N/2),np.repeat(Ii,Ni))) 
+    h = np.concatenate((np.repeat(h1,N/2),np.repeat(h2,N/2),np.repeat(hi,Ni)))
     
     half_n = int(N/2)
     
-    W,E = make_matrix(N) # returns weighted adjacency matrix, and edge list
-    f = make_fire_rate(N,nu1,nu2)
+    W,E = make_matrix(N,Ni) # returns weighted adjacency matrix, and edge list
+    f = make_fire_rate(N,Ni,nu1,nu2,nui)
     w_avg_1 =  np.zeros((nt,1))
     w_avg_2 = np.zeros((nt,1))
     w_avg_3 =  np.zeros((nt,1))
@@ -221,7 +231,7 @@ if __name__ == "__main__":
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
     
-    all_weights = np.zeros((nt,N,N))
+    #all_weights = np.zeros((nt,N,N))
     output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
@@ -242,16 +252,16 @@ if __name__ == "__main__":
         f = fire_step(tau_r,f,h,W,dt)
         h = inpt_step(tau_m,h,R,I,dt)
         
-        all_weights[i] = W
-        w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() #np.mean(W[:half_n,:half_n]) # Intracortical averages 1 (Quadrant 4)
-        w_avg_2[i] = W[half_n:,half_n:][np.nonzero(W[half_n:,half_n:])].mean() #np.mean(W[half_n:,half_n:]) # Intracortical averages 2 (Quadrant 2)
-        w_avg_3[i] = W[:half_n,half_n:][np.nonzero(W[:half_n,half_n:])].mean() #np.mean(W[:half_n,half_n:]) # Intercortical averages 1 (Quadrant 1)
-        w_avg_4[i] = W[half_n:,:half_n][np.nonzero(W[half_n:,:half_n])].mean() #np.mean(W[half_n:,:half_n]) # Intercortical averages 2 (Quadrant 3)
+        #all_weights[i] = W
+        w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() 
+        w_avg_2[i] = W[half_n:N,half_n:N][np.nonzero(W[half_n:N,half_n:N])].mean() 
+        w_avg_3[i] = W[:half_n,half_n:N][np.nonzero(W[:half_n,half_n:N])].mean() 
+        w_avg_4[i] = W[half_n:N,:half_n][np.nonzero(W[half_n:N,:half_n])].mean() 
         h_avg[i] = np.mean(h)
         f_avg[i] = f[:half_n].mean()
-        f_avg2[i] = f[half_n:].mean()
+        f_avg2[i] = f[half_n:N].mean()
         
-        output[i] = np.sum(W@f)
+        output[i] = np.sum(W[0:N,0:N]@f[:N])
 
         # Gephi output
         if output_gephi and i in graph_steps:
