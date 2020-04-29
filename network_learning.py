@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+import GlobalRules
 
 def make_matrix(N, intra_prob=0.7, inter_prob = 0.25):
     '''
@@ -165,45 +166,17 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     return W,E,theta
 
 
-def weightBalance(W, i, N):
-    half_n = int(N/2)
-    
-    # Determine the regime of the dying neuron, and hence 
-    # which regime the weight should be siphoned to.
-    if i<int(N/2):
-        old_regime = W[i][:half_n]
-        new_regime = W[half_n:,half_n:]
-        add_to = half_n
-        add_from = 0
-    else:
-        old_regime = W[i][half_n:]
-        new_regime = W[:half_n,:half_n]
-        add_to = 0
-        add_from = half_n
-    
-    # Find locations with weights from dying neuron, and locations of 
-    # dead neurons in the other regime.
-    nonzero_locs = np.where(old_regime!=0)[0]
-    zero_locs = np.where(new_regime==0)
-    zero_locs = list(zip(zero_locs[0],zero_locs[1]))
-    
-    if len(zero_locs)>0 and len(nonzero_locs)>0:
-        # Randomly select a neuron to kill
-        j_f = nonzero_locs[np.random.randint(len(nonzero_locs))]
-        
-        # Randomly select a neuron in the other regime to activate
-        i_t, j_t = zero_locs[np.random.randint(len(zero_locs))]
-        
-        W[i_t+add_to][j_t+add_to] = W[i][j_f]
-        W[i][j_f+add_from] = 0
-    
-    return W
-
-
-def input_manipulation(rule,I,i,nt,shutoff_time):
+def input_manipulation(rule,I,i,nt,shutoff_time,turnon_time):
     if rule=='fixed shutoff':
         if i>=nt*shutoff_time:
             I[:half_n]=0
+            
+    elif rule=='shutoff recovery':
+        if i>=nt*shutoff_time and i<nt*turnon_time:
+            I[:half_n]=0
+        elif i>=nt*turnon_time:
+            I[:half_n]=1
+            
     elif rule=='sin':
         pass
     elif rule=='cos':           
@@ -258,6 +231,7 @@ if __name__ == "__main__":
     I1 = 10   
     I2 = 9
     shutoff_time = 0.25 # % of the way through training when input is shut off.
+    turnon_time = 0.9 # % of the way through training when input is turned back on.
     
     R = 1 # Resistance
     # time parameters
@@ -280,12 +254,13 @@ if __name__ == "__main__":
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
+    num_aud_zeros = np.zeros((nt,1))
     
     all_weights = np.zeros((nt,N,N))
     output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
-    input_rules = ['fixed shutoff','sin','cos']
+    input_rules = ['fixed shutoff','shutoff recovery','sin','cos']
 
     # Rate to print graphml files
     output_gephi = False
@@ -293,10 +268,12 @@ if __name__ == "__main__":
     graph_steps.append(int(nt/20)-1)
     graph_steps.append(int(nt/20)+3)
     nz = len(str(nt))
+    global_rule = GlobalRules.Siphoning(N, free=True)
+    
     for i in range(nt):
         print ('\rCompletion: ' + f'{round(((i+1)/nt)*100,2):0>2}', end='')
         
-        I = input_manipulation(input_rules[0],I,i,nt,shutoff_time)
+        I = input_manipulation(input_rules[1],I,i,nt,shutoff_time,turnon_time)
         
         W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f = fire_step(tau_r,f,h,W,dt)
@@ -313,14 +290,10 @@ if __name__ == "__main__":
         
         output[i] = np.sum(W@f)
         
-        # Global weight siphon rule.
-        if any(f<0.75):
-            siphon_chance = 0.0005
-            for i, fr in enumerate(f):
-                if fr<0.75:
-                    if np.random.uniform(0,1)<siphon_chance:
-                        W = weightBalance(W, i, N)
+        W = global_rule.run(f,W,i)
         
+        aud_zeros = len(np.where(W[half_n:,half_n:]==0)[0])
+        num_aud_zeros[i] = aud_zeros
         
         # Gephi output
         if output_gephi and i in graph_steps:
@@ -344,6 +317,28 @@ if __name__ == "__main__":
     ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
     
     plt.legend(loc='upper right')
+    plt.show()
+    
+    
+    
+    # Separated plots.
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,w_avg_1,label='$w_1$',color='red')
+    plt.plot(t_ls,w_avg_2,label='$w_2$',color='yellow')
+    plt.plot(t_ls,w_avg_3,label='$w_3$',color='blue')
+    plt.plot(t_ls,w_avg_4,label='$w_4$',color='green')
+    plt.legend(loc='upper right')
+    plt.show()
+    
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,h_avg,label='$h$',color='brown')
+    plt.plot(t_ls,f_avg,label='$\\nu_1$',color='purple')
+    plt.plot(t_ls,f_avg2,label='$\\nu_2$',color='black')
+    plt.legend(loc='upper right')
+    plt.show()
+    
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,num_aud_zeros)
     plt.show()
     
     #neuron_weight_plot(all_weights,save_dir='')
