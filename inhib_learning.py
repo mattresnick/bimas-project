@@ -194,7 +194,6 @@ def input_manipulation(rule,I,i,nt,shutoff_time):
     
     return I
 
-
 def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
     '''
     Parameters:
@@ -222,8 +221,8 @@ def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
 
 if __name__ == "__main__":
     # parameters
-    N = 50       # network size
-    Ni = 40
+    N = 100       # network size
+    Ni = 60
     Nt = N+Ni
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
@@ -242,14 +241,14 @@ if __name__ == "__main__":
     h2 = 0 
     hi = 0  
     # Input current 
-    I1 = 1   
+    I1 = 3   
     I2 = 1
-    Ii = 1
-    shutoff_time = 0.25 # % of the way through training when input is shut off.
+    Ii = 0.5
+    shutoff_time = 0.3 # % of the way through training when input is shut off.
     
     R = 1 # Resistance
     # time parameters
-    T = 100           # end time
+    T = 20           # end time
     dt = 0.1        #time step
     nt = int(T/dt)+1 # number of time steps
 
@@ -310,7 +309,7 @@ if __name__ == "__main__":
         # w_avg_4[i] = W[half_n:N,:half_n][np.nonzero(W[half_n:N,:half_n])].mean() 
         # w_avg_5[i] = W[N:,:half_n][np.nonzero(W[N:,:half_n])].mean() #W[N:,:half_n].mean()
         # w_avg_6[i] = W[:N,N:][np.nonzero(W[:N,N:])].mean()  #W[:N,N:].mean() 
-        
+
         w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() # W11
         w_avg_2[i] = W[:half_n,half_n:N][np.nonzero(W[:half_n,half_n:N])].mean() # W12
         w_avg_3[i] = W[:half_n,N:][np.nonzero(W[:half_n,N:])].mean() # W1I
@@ -334,26 +333,33 @@ if __name__ == "__main__":
 
     t_ls = np.linspace(0,T,nt)
     fig, ax = plt.subplots(3,1)
-    ax[0].plot(t_ls,w_avg_1,label='$w_{1,1}$')
-    ax[0].plot(t_ls,w_avg_2,label='$w_{1,2}$')
-    ax[0].plot(t_ls,w_avg_4,label='$w_{2,1}$')
-    ax[0].plot(t_ls,w_avg_5,label='$w_{2,2}$')
-    ax[0].plot(t_ls,w_avg_7,label='$w_{1,I}$')
-    ax[0].plot(t_ls,w_avg_8,label='$w_{2,I}$')
+    ax[0].plot(t_ls,w_avg_1,'d-',alpha=0.75,markevery=12,label='$w_{1,1}$')
+    ax[0].plot(t_ls,w_avg_2,'*-',alpha=0.75,markevery=11,label='$w_{1,2}$')
+    ax[0].plot(t_ls,w_avg_4,'X-',alpha=0.75,markevery=10,label='$w_{2,1}$')
+    ax[0].plot(t_ls,w_avg_5,'o-',alpha=0.75,markevery=9,label='$w_{2,2}$')
+    ax[0].plot(t_ls,w_avg_7,'^--',alpha=0.75,markevery=8,label='$w_{1,I}$')
+    ax[0].plot(t_ls,w_avg_8,'s-',alpha=0.75,markevery=7,label='$w_{2,I}$')
+    #ax[0].plot(t_ls[int(shutoff_time*nt)],0,'o',label='Shutoff Time')
+    ax[0].set_xticks( [t_ls[0],t_ls[int(shutoff_time*nt)],t_ls[-1]] )
+    ax[0].set_xticklabels([0,'shutoff',T])
     ax[0].legend(loc='upper left')
     ax[0].set_title('Excitatory Weights')
 
-    ax[1].plot(t_ls,w_avg_3,label='$w_{I,1}$')
-    ax[1].plot(t_ls,w_avg_6,label='$w_{I,2}$')
-    ax[1].plot(t_ls,w_avg_9,label='$w_{I,I}$')
+    ax[1].plot(t_ls,w_avg_3,'^-',alpha=0.75,markevery=10,label='$w_{I,1}$')
+    ax[1].plot(t_ls,w_avg_6,'s-',alpha=0.75,markevery=9,label='$w_{I,2}$')
+    ax[1].plot(t_ls,w_avg_9,'o-',alpha=0.75,markevery=8,label='$w_{I,I}$')
+    ax[1].set_xticks( [t_ls[0],t_ls[int(shutoff_time*nt)],t_ls[-1]] )
+    ax[1].set_xticklabels([0,'shutoff',T])
     ax[1].legend(loc='upper left')
     ax[1].set_title('Inhibitory Weights')
     
     #plt.plot(t_ls,h_avg,label='$h$')
-    ax[2].plot(t_ls,f_avg,label='$\\nu_1$')
-    ax[2].plot(t_ls,f_avg2,label='$\\nu_2$')
-    ax[2].plot(t_ls,f_avg2,label='$\\nu_i$')
-    ax[2].legend(loc='upper right')
+    ax[2].plot(t_ls,f_avg,'^--',alpha=0.75,markevery=10,label='$\\nu_1$')
+    ax[2].plot(t_ls,f_avg2,'s--',alpha=0.75,markevery=8,label='$\\nu_2$')
+    ax[2].plot(t_ls,f_avg2,'o--',alpha=0.75,markevery=9,label='$\\nu_i$')
+    ax[2].set_xticks( [t_ls[0],t_ls[int(shutoff_time*nt)],t_ls[-1]] )
+    ax[2].set_xticklabels([0,'shutoff',T])
+    ax[2].legend(loc='upper left')
     ax[2].set_title('Firing Rate Averages In Each Cortex')
     
     fig, axs = plt.subplots()
