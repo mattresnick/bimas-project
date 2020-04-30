@@ -1,35 +1,61 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import networkx as nx
+import GlobalRules
 
-def make_matrix(N):
+def make_matrix(N, intra_prob=0.7, inter_prob = 0.25):
     '''
-    Make an adjacency matrix with higher intra connectivity density than inter
-    Designed with 2 cliques representing visual/audio cortices
-    return edge list
-    '''
-    roll = lambda p: int(np.random.uniform()<p)
+    Make an adjacency matrix with higher intra connectivity density than inter.
+    Designed with 2 cliques representing visual/audio cortices.
     
-    half_n = int((N-10)/2)
-    p1 = 0.5 # probability of connecting to node in clique
-    p2 = 0.01 # probability of connecting to node outside clique
-    w = 1/np.sqrt(N) # initial weight between connections
-    A = np.zeros((N,N))
+    Paramters:
+        - N: (int) Number of neurons in the entire population.
+        - intra_prob: (float) probability for intracortical connection 0<p<1
+        - inter_prob: (float) probability for intercortical connection 0<p<1, and should be less than intra_prob.
+    
+    Returns:
+        - W: (2D ndarray) Weighted edge matrix for neuron population.
+        - E: (2D ndarray) List of connection indices and corresponding weight values for efficient updates during learning.
+    
+    Where A=intra, E=inter, the weight regimes are structured as:
+    
+    A | E
+    --+--
+    E | A
+    
+    '''
+    half_n = int(N/2)
+    
+    # Initize weights as uniform sampling from 0 to 1.
+    W = np.random.uniform(0,1,(N,N)) 
+    
+    connection_masks = []
+    for i in range(4):
+        # Initialize random neuron connection values.
+        W_connection = np.random.uniform(0,1,(half_n,half_n))
+        
+        # Make connection masks, with connection probability 0.5 or 0.05,
+        # depending on the regime.
+        prob = inter_prob
+        if not i%3: prob = intra_prob
+        connection_masks.append((W_connection<prob)*W_connection)
+    
+    # Construct the mask from all 4 regimes.
+    top_half_mask = np.hstack((connection_masks[0],connection_masks[1]))
+    bottom_half_mask = np.hstack((connection_masks[2],connection_masks[3]))
+    full_mask = np.vstack((top_half_mask, bottom_half_mask))
+    
+    # Mask the weights and zero the diagonal to remove self-loops.
+    W = full_mask
+    np.fill_diagonal(W, 0)
+    
     E = []
-    for i in range(N):
-        for j in range(N):
-            if (i<=half_n and j<=half_n) or (i>half_n and j>half_n):
-                A[i,j] = roll(p1)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
-            else:
-                A[i,j] = roll(p2)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
-                
-    np.fill_diagonal(A, 0) # no self loops
-    W = A*w
-    return W,E
+    I,J = W.shape
+    for i in range(I):
+        for j in range(J):
+            E.append(np.array([i,j,W[i][j]]))
+    
+    return W, np.array(E)
 
 def make_fire_rate(N,nu1,nu2):
     '''
@@ -100,7 +126,7 @@ def fire_step(tau_r,nu,h,w,dt):
     
     h_ = np.reshape(h,(N,1))
     nu_ = np.reshape(nu,(N,1))
-    raw_out = np.reshape(sigmoid((w@nu_)+h_),(N,1))
+    raw_out = np.reshape(sigmoid((w@nu_)*h_),(N,1))
 
     nu = nu_+(dt/tau_r)*(-nu_+raw_out)
 
@@ -140,10 +166,17 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     return W,E,theta
 
 
-def input_manipulation(rule,I,i,nt,shutoff_time):
+def input_manipulation(rule,I,i,nt,shutoff_time,turnon_time):
     if rule=='fixed shutoff':
         if i>=nt*shutoff_time:
             I[:half_n]=0
+            
+    elif rule=='shutoff recovery':
+        if i>=nt*shutoff_time and i<nt*turnon_time:
+            I[:half_n]=0
+        elif i>=nt*turnon_time:
+            I[:half_n]=1
+            
     elif rule=='sin':
         pass
     elif rule=='cos':           
@@ -198,6 +231,7 @@ if __name__ == "__main__":
     I1 = 10   
     I2 = 9
     shutoff_time = 0.25 # % of the way through training when input is shut off.
+    turnon_time = 0.9 # % of the way through training when input is turned back on.
     
     R = 1 # Resistance
     # time parameters
@@ -220,12 +254,13 @@ if __name__ == "__main__":
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
+    num_aud_zeros = np.zeros((nt,1))
     
     all_weights = np.zeros((nt,N,N))
     output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
-    input_rules = ['fixed shutoff','sin','cos']
+    input_rules = ['fixed shutoff','shutoff recovery','sin','cos']
 
     # Rate to print graphml files
     output_gephi = False
@@ -233,10 +268,12 @@ if __name__ == "__main__":
     graph_steps.append(int(nt/20)-1)
     graph_steps.append(int(nt/20)+3)
     nz = len(str(nt))
+    global_rule = GlobalRules.Siphoning(N, free=True)
+    
     for i in range(nt):
         print ('\rCompletion: ' + f'{round(((i+1)/nt)*100,2):0>2}', end='')
         
-        I = input_manipulation(input_rules[0],I,i,nt,shutoff_time)
+        I = input_manipulation(input_rules[1],I,i,nt,shutoff_time,turnon_time)
         
         W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
         f = fire_step(tau_r,f,h,W,dt)
@@ -252,7 +289,12 @@ if __name__ == "__main__":
         f_avg2[i] = f[half_n:].mean()
         
         output[i] = np.sum(W@f)
-
+        
+        W = global_rule.run(f,W,i)
+        
+        aud_zeros = len(np.where(W[half_n:,half_n:]==0)[0])
+        num_aud_zeros[i] = aud_zeros
+        
         # Gephi output
         if output_gephi and i in graph_steps:
             G = nx.from_numpy_matrix(W)
@@ -275,6 +317,28 @@ if __name__ == "__main__":
     ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
     
     plt.legend(loc='upper right')
+    plt.show()
+    
+    
+    
+    # Separated plots.
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,w_avg_1,label='$w_1$',color='red')
+    plt.plot(t_ls,w_avg_2,label='$w_2$',color='yellow')
+    plt.plot(t_ls,w_avg_3,label='$w_3$',color='blue')
+    plt.plot(t_ls,w_avg_4,label='$w_4$',color='green')
+    plt.legend(loc='upper right')
+    plt.show()
+    
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,h_avg,label='$h$',color='brown')
+    plt.plot(t_ls,f_avg,label='$\\nu_1$',color='purple')
+    plt.plot(t_ls,f_avg2,label='$\\nu_2$',color='black')
+    plt.legend(loc='upper right')
+    plt.show()
+    
+    fig, ax = plt.subplots(figsize=(12,7))
+    plt.plot(t_ls,num_aud_zeros)
     plt.show()
     
     #neuron_weight_plot(all_weights,save_dir='')

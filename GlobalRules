@@ -1,0 +1,121 @@
+import numpy as np
+
+class Siphoning():
+    '''
+    Global weight-siphoning rules.
+    
+    Parameters:
+        - N: (int) Number of neurons in the population.
+        - threshold: (float or int) Fixed threshold for non-free rules.
+        - siphon_chance: (float) Probability that a siphon event will occur
+          given all other conditions are met, dpending on the rule. It makes
+          sense for this to be slightly higher when the rule is unilateral.
+        - uni: (boolean) True if the rule is desired to be unilateral, False 
+          for bilateral rules.
+        - free: (boolean) True for free bilateral rule, False for either
+          non-free bilateral or unilateral.
+    '''
+    def __init__(self, N, threshold=0.75, siphon_chance=0.0001, uni=False, free=False):
+        self.N = N
+        self.siphon_chance = siphon_chance
+        self.threshold = threshold
+        self.uni = uni
+        self.free = free
+    
+    def run(self, f, W, step):
+        '''
+        Driver function. Will retain previous firing rates for 
+        derivative calculation.
+        '''
+        if step!=0:
+            W = self.check(f, W)
+        
+        self.old_f = f
+        return W
+    
+    def firstDerivative(self, f, i):
+        # Approximate first-derivative of firing rate.
+        if self.old_f[i]==0:
+            return 0
+        else:
+            return (f - self.old_f[i])/self.old_f[i]
+    
+    def check(self, f, W):
+        '''
+        Checks all conditions for a siphon event, given rules during object
+        instantiation. Then determines if the event happens based on the
+        given siphon chance.
+        '''
+        if any(f<self.threshold):
+            for i, fr in enumerate(f):
+                f_der = self.firstDerivative(fr,i)
+                
+                if (fr<self.threshold or self.free) and (f_der<0 or self.uni):
+                    if np.random.uniform(0,1)<self.siphon_chance:
+                        W = self.siphon(W, i, reverse=False)
+                
+                elif (fr<self.threshold or self.free) and (f_der>0 and not self.uni):
+                    if np.random.uniform(0,1)<self.siphon_chance:
+                        W = self.siphon(W, i, reverse=True)
+        
+        return W
+    
+    def siphon(self, W, i, reverse=False):
+        '''
+        Handles siphon events. Determines the current regime and the target
+        regime, identifies valid locations for the event to occur (zero vs 
+        non-zero connections), then selects two valid candidates randomly
+        and performs a swap of values.
+        '''
+        
+        half_n = int(self.N/2)
+    
+        # Determine the regime of the dying neuron, and hence 
+        # which regime the weight should be siphoned to.
+        if i<int(self.N/2):
+            old_regime = W[i][:half_n]
+            new_regime = W[half_n:,half_n:]
+            add_to = half_n
+            add_from = 0
+        else:
+            old_regime = W[i][half_n:]
+            new_regime = W[:half_n,:half_n]
+            add_to = 0
+            add_from = half_n
+        
+        if reverse:
+            # Find locations with weights from activating neuron, and locations of 
+            # active neurons in the other regime.
+            old_locs = np.where(old_regime==0)[0]
+            new_locs = np.where(new_regime!=0)
+            new_locs = list(zip(new_locs[0],new_locs[1]))
+            
+            if len(new_locs)>0 and len(old_locs)>0:
+                # Randomly select a neuron to activate
+                j_f = old_locs[np.random.randint(len(old_locs))]
+                
+                # Randomly select a neuron in the other regime to kill
+                i_t, j_t = new_locs[np.random.randint(len(new_locs))]
+                
+                W[i][j_f+add_from] = W[i_t+add_to][j_t+add_to]
+                W[i_t+add_to][j_t+add_to] = 0
+                
+        else:
+            # Find locations with weights from dying neuron, and locations of 
+            # dead neurons in the other regime.
+            nonzero_locs = np.where(old_regime!=0)[0]
+            zero_locs = np.where(new_regime==0)
+            zero_locs = list(zip(zero_locs[0],zero_locs[1]))
+            
+            if len(zero_locs)>0 and len(nonzero_locs)>0:
+                # Randomly select a neuron to kill
+                j_f = nonzero_locs[np.random.randint(len(nonzero_locs))]
+                
+                # Randomly select a neuron in the other regime to activate
+                i_t, j_t = zero_locs[np.random.randint(len(zero_locs))]
+                
+                W[i_t+add_to][j_t+add_to] = W[i][j_f]
+                W[i][j_f+add_from] = 0
+        
+        return W
+    
