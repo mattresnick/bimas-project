@@ -11,30 +11,49 @@ def make_matrix(N,Ni):
     roll = lambda p: int(np.random.uniform()<p)
     Nt = N+Ni
     half_n = int((N)/2)
-    p1 = 0.6 # probability of connecting to node in clique
-    p2 = 0.1 # probability of connecting to node outside clique
+    p1 = 0.5 # probability of connecting to node in clique
+    p2 = 0.05 # probability of connecting to node outside clique
     p3 = 0.3 # probability of connecting to node outside clique
-    w = 1/np.sqrt(N) # initial weight between connections
-    A = np.zeros((Nt,Nt))
-    E = []
+    we = 1/np.sqrt(N) # initial weight between connections
+    wi = 1/np.sqrt(N)
+    Ae = np.zeros((Nt,Nt))
+    Ai = np.zeros((Nt,Nt))
+    Ee = []
+    Ei = []
     for i in range(Nt):
         for j in range(Nt):
             if (i<=half_n and j<=half_n) or (i>half_n and j>half_n and i<=N and j<=N):
-                A[i,j] = roll(p1)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
+                # EE intra-modal
+                Ae[i,j] = roll(p1)
+                if Ae[i,j] and i!=j:
+                    Ee.append([i,j,we])
             elif (i>N and j>N):
-                A[i,j] = roll(p1)/(2*w)
-            elif (i>N and j<=N) or (i<=N and j>N):
-                A[i,j] = -roll(p1)/(2*w)
+                # II
+                Ai[i,j] = roll(p3)
+                if Ai[i,j] and i!=j:
+                    Ei.append([i,j,wi])
+            elif i>N and j<=N:
+                # IE
+                Ai[i,j] = roll(p3)
+                if Ai[i,j] and i!=j:
+                    Ei.append([i,j,wi])
+            elif i<=N and j>N:
+                # EI
+                Ae[i,j] = roll(p3)
+                if Ae[i,j] and i!=j:
+                    Ee.append([i,j,we])
             else:
-                A[i,j] = roll(p2)
-                if A[i,j] and i!=j:
-                    E.append([i,j,w])
+                # EE cross-modal
+                Ae[i,j] = roll(p2)
+                if Ae[i,j] and i!=j:
+                    Ee.append([i,j,we])
                 
-    np.fill_diagonal(A, 0) # no self loops
-    W = A*w
-    return W,E
+    np.fill_diagonal(Ae, 0) # no self loops
+    np.fill_diagonal(Ai, 0) # no self loops
+    We = Ae*we
+    Wi = Ai*wi
+    
+    return We,Wi,Ee,Ei
 
 def make_fire_rate(N,Ni,nu1,nu2,nui):
     '''
@@ -48,7 +67,9 @@ def make_fire_rate(N,Ni,nu1,nu2,nui):
     fire1 = np.clip(np.random.normal(loc=nu1,scale=stddev,size=int(N/2)),a_min=min_val,a_max=max_val)
     fire2 = np.clip(np.random.normal(loc=nu2,size=int(N/2)),a_min=min_val,a_max=max_val)
     fire3 = np.clip(np.random.normal(loc=nui,size=int(Ni)),a_min=min_val,a_max=max_val)
-    return np.hstack((fire1,fire2,fire3))
+    zero_i = np.repeat(0,Ni)
+    zero_e = np.repeat(0,N)
+    return np.hstack((fire1,fire2,zero_i)),np.hstack((zero_e,fire3))
 
 def oja_step(gamma,nu1,nu2,w,dt):
     '''
@@ -62,7 +83,7 @@ def oja_step(gamma,nu1,nu2,w,dt):
     oupt:
         returns the new synaptic weight at time t+dt
     '''
-    dw = -w+gamma*(nu1*nu2-w*nu1**2)
+    dw = gamma*(nu1*nu2-w*nu1**2)
     return w+dt*dw
 
 
@@ -70,7 +91,7 @@ def bcm_step(eta,nu1,nu2,w,dt,theta,tau_t):
     '''
     BCM learning rule step
     '''
-    dw = eta*nu1*nu2*(nu2-theta)
+    dw = -w+eta*nu1*nu2*(nu2-theta)
     dtheta = (1/tau_t)*(nu2**2 - theta)
     
     return w + dt*dw, theta + dtheta
@@ -96,20 +117,33 @@ def pattern_step(eta,nu1,nu2,w,dt):
 
 
 
-def fire_step(tau_r,nu,h,w,dt):
+def fire_step(tau_r,fe,fi,h,We,Wi,Ne,Ni,dt):
     '''
     updates the firing rates
     '''
+    re = 0.
+    ri = 0.
     sigmoid = lambda x: 1/(1+np.exp(-x))
-    N = len(h)
+    N=Ne+Ni
     
+    Wei = np.copy(We)
+    Wee = np.copy(We)
+    Wie = np.copy(Wi)
+    Wii = np.copy(Wi)
+
+    Wee[Ne:,:Ne]=0
+    Wie[Ne:,Ne:]=0
+    Wei[:Ne,Ne:]=0 
+    Wii[Ne:,:Ne]=0
+
     h_ = np.reshape(h,(N,1))
-    nu_ = np.reshape(nu,(N,1))
-    raw_out = np.reshape(sigmoid((w@nu_)+h_),(N,1))
-
-    nu = nu_+(dt/tau_r)*(-nu_+raw_out)
-
-    return nu
+    nue_ = np.reshape(fe,(N,1))
+    nui_ = np.reshape(fi,(N,1))
+    raw_out_e = (1-re*nue_)*sigmoid(((Wee@nue_)-(Wie@nui_)))+h_
+    raw_out_i = (1-ri*nui_)*sigmoid(((Wei@nue_)-(Wii@nui_)))+h_
+    nue = nue_+(dt/tau_r)*(-nue_+raw_out_e)
+    nui = nui_+(dt/tau_r)*(-nui_+raw_out_i)
+    return nue,nui
 
 def inpt_step(tau_m,h,R,I,dt):
     '''
@@ -117,7 +151,7 @@ def inpt_step(tau_m,h,R,I,dt):
     '''
     return h + dt/tau_m*(-h+R*I)
 
-def learn(rule,E,W,f,gamma,dt,theta,tau_t):
+def learn(rule,E,W,f,gamma,dt,theta,tau_t,N):
     '''
     update the weights given a rule (BCM or Oja)
     '''
@@ -133,7 +167,7 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             w_tmp, theta = cov_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t,f)
         elif rule=='pattern':
             w_tmp, theta = pattern_step(gamma,f[link[0]],f[link[1]],link[2],dt,theta,tau_t)
-        
+
         E[i][2] = w_tmp
         try:
             W[link[0],link[1]] = w_tmp
@@ -142,7 +176,11 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
             print('f[link[0]]',f[link[0]])
             print('f[link[1]]',f[link[1]])
             print('link[2]',link[2])
-    return W,E,theta
+    We = np.copy(W)
+    Wi = np.copy(W)
+    Wi[:N,] = 0
+    We[N:,] = 0
+    return We,Wi,E[:N],E[N:],theta
 
 
 def input_manipulation(rule,I,i,nt,shutoff_time):
@@ -184,35 +222,35 @@ def neuron_weight_plot(weights, individual=-1, save_dir='.\\figures\\'):
 
 if __name__ == "__main__":
     # parameters
-    N = 60       # network size
-    Ni = 20
+    N = 50       # network size
+    Ni = 40
     Nt = N+Ni
     nu1 = 0      # firing rate of 1st clique
     nu2 = 0      # firing rate of 2nd clique
-    nui = 1      # firing rate of 2nd clique
-    gamma = 0.1  # learning rate
+    nui = 0      # firing rate of 2nd clique
+    gamma = 1  # learning rate
     
     '''For BCM'''
-    theta = 0.5 #strength threshold
+    theta = 1 #strength threshold
     tau_t = 1 #threshold time update constant
     '''-------'''
     
-    tau_r = 2 # firing rate update time constant
+    tau_r = 0.5 # firing rate update time constant
     tau_m = 2 # input update time constant
     # input voltage the node experiences at time 0
     h1 = 0   
     h2 = 0 
     hi = 0  
     # Input current 
-    I1 = 10   
-    I2 = 9
+    I1 = 1   
+    I2 = 1
     Ii = 1
     shutoff_time = 0.25 # % of the way through training when input is shut off.
     
     R = 1 # Resistance
     # time parameters
-    T = 30           # end time
-    dt = 0.01        #time step
+    T = 100           # end time
+    dt = 0.1        #time step
     nt = int(T/dt)+1 # number of time steps
 
     # Combine parameters into a single vector for each node
@@ -221,17 +259,22 @@ if __name__ == "__main__":
     
     half_n = int(N/2)
     
-    W,E = make_matrix(N,Ni) # returns weighted adjacency matrix, and edge list
-    f = make_fire_rate(N,Ni,nu1,nu2,nui)
+    We,Wi,Ee,Ei = make_matrix(N,Ni) # returns weighted adjacency matrix, and edge list
+    fe,fi = make_fire_rate(N,Ni,nu1,nu2,nui)
     w_avg_1 =  np.zeros((nt,1))
     w_avg_2 = np.zeros((nt,1))
     w_avg_3 =  np.zeros((nt,1))
     w_avg_4 = np.zeros((nt,1))
+    w_avg_5 = np.zeros((nt,1))
+    w_avg_6 = np.zeros((nt,1))
+    w_avg_7 = np.zeros((nt,1))
+    w_avg_8 = np.zeros((nt,1))
+    w_avg_9 = np.zeros((nt,1))
     h_avg = np.zeros((nt,1))
     f_avg = np.zeros((nt,1))
     f_avg2 = np.zeros((nt,1))
-    
-    #all_weights = np.zeros((nt,N,N))
+    f_avg3 = np.zeros((nt,1))
+
     output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
@@ -243,48 +286,77 @@ if __name__ == "__main__":
     graph_steps.append(int(nt/20)-1)
     graph_steps.append(int(nt/20)+3)
     nz = len(str(nt))
+
+    f = np.zeros((N+Ni,1))
+
     for i in range(nt):
-        print ('\rCompletion: ' + f'{round(((i+1)/nt)*100,2):0>2}', end='')
+        #print ('\rCompletion: ' + f'{round(((i+1)/nt)*100,2):0>2}', end='')
         
         I = input_manipulation(input_rules[0],I,i,nt,shutoff_time)
-        
-        W,E,theta = learn(weight_update_rules[1],E,W[:,:],f,gamma,dt,theta,tau_t)
-        f = fire_step(tau_r,f,h,W,dt)
-        h = inpt_step(tau_m,h,R,I,dt)
-        
-        #all_weights[i] = W
-        w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() 
-        w_avg_2[i] = W[half_n:N,half_n:N][np.nonzero(W[half_n:N,half_n:N])].mean() 
-        w_avg_3[i] = W[:half_n,half_n:N][np.nonzero(W[:half_n,half_n:N])].mean() 
-        w_avg_4[i] = W[half_n:N,:half_n][np.nonzero(W[half_n:N,:half_n])].mean() 
-        h_avg[i] = np.mean(h)
-        f_avg[i] = f[:half_n].mean()
-        f_avg2[i] = f[half_n:N].mean()
-        
-        output[i] = np.sum(W[0:N,0:N]@f[:N])
 
+        f[:N] = np.reshape(fe[:N],(N,1))
+        f[N:] = np.reshape(fi[N:],(Ni,1))
+        W = We+Wi
+        
+        E = Ee+Ei
+        We,Wi,Ee,Ei,theta = learn(weight_update_rules[0],E,W,f,gamma,dt,theta,tau_t,N)
+
+        fe,fi = fire_step(tau_r,fe,fi,h,We,Wi,N,Ni,dt)
+        h = inpt_step(tau_m,h,R,I,dt)
+        W = We+Wi
+        # w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() #W[:half_n,:half_n].mean() 
+        # w_avg_2[i] = W[half_n:N,half_n:N][np.nonzero(W[half_n:N,half_n:N])].mean() #W[half_n:N,half_n:N].mean()
+        # w_avg_3[i] = W[:half_n,half_n:N][np.nonzero(W[:half_n,half_n:N])].mean() 
+        # w_avg_4[i] = W[half_n:N,:half_n][np.nonzero(W[half_n:N,:half_n])].mean() 
+        # w_avg_5[i] = W[N:,:half_n][np.nonzero(W[N:,:half_n])].mean() #W[N:,:half_n].mean()
+        # w_avg_6[i] = W[:N,N:][np.nonzero(W[:N,N:])].mean()  #W[:N,N:].mean() 
+        
+        w_avg_1[i] = W[:half_n,:half_n][np.nonzero(W[:half_n,:half_n])].mean() # W11
+        w_avg_2[i] = W[:half_n,half_n:N][np.nonzero(W[:half_n,half_n:N])].mean() # W12
+        w_avg_3[i] = W[:half_n,N:][np.nonzero(W[:half_n,N:])].mean() # W1I
+        w_avg_4[i] = W[half_n:N,:half_n][np.nonzero(W[half_n:N,:half_n])].mean() # W21
+        w_avg_5[i] = W[half_n:N,half_n:N][np.nonzero(W[half_n:N,half_n:N])].mean() # W22
+        w_avg_6[i] = W[half_n:N,N:][np.nonzero(W[half_n:N,N:])].mean() # W2I
+        w_avg_7[i] = W[N:,:half_n][np.nonzero(W[N:,:half_n])].mean() # WI1
+        w_avg_8[i] = W[N:,half_n:N][np.nonzero(W[N:,half_n:N])].mean() # WI2
+        w_avg_9[i] = W[N:,N:][np.nonzero(W[N:,N:])].mean() # WII
+ 
+        h_avg[i] = np.mean(h)
+        f_avg[i] = fe[:half_n].mean()
+        f_avg2[i] = fe[half_n:N].mean()
+        f_avg3[i] = fi[N:].mean()
         # Gephi output
         if output_gephi and i in graph_steps:
             G = nx.from_numpy_matrix(W)
             step = str(i).zfill(nz)
             nx.write_graphml(G,'bcm_run/step_{}_adj.graphml'.format(step))
     print('')
-    
+
     t_ls = np.linspace(0,T,nt)
-    fig, ax = plt.subplots(figsize=(12,7))
-    plt.plot(t_ls,w_avg_1,label='$w_{1,1}$')
-    plt.plot(t_ls,w_avg_2,label='$w_{1,2}$')
-    plt.plot(t_ls,w_avg_3,label='$w_{2,1}$')
-    plt.plot(t_ls,w_avg_4,label='$w_{2,2}$')
-    plt.plot(t_ls,h_avg,label='$h$')
-    plt.plot(t_ls,f_avg,label='$\\nu_1$')
-    plt.plot(t_ls,f_avg2,label='$\\nu_2$')
-    plt.legend(loc='upper right')
+    fig, ax = plt.subplots(3,1)
+    ax[0].plot(t_ls,w_avg_1,label='$w_{1,1}$')
+    ax[0].plot(t_ls,w_avg_2,label='$w_{1,2}$')
+    ax[0].plot(t_ls,w_avg_4,label='$w_{2,1}$')
+    ax[0].plot(t_ls,w_avg_5,label='$w_{2,2}$')
+    ax[0].plot(t_ls,w_avg_7,label='$w_{1,I}$')
+    ax[0].plot(t_ls,w_avg_8,label='$w_{2,I}$')
+    ax[0].legend(loc='upper left')
+    ax[0].set_title('Excitatory Weights')
+
+    ax[1].plot(t_ls,w_avg_3,label='$w_{I,1}$')
+    ax[1].plot(t_ls,w_avg_6,label='$w_{I,2}$')
+    ax[1].plot(t_ls,w_avg_9,label='$w_{I,I}$')
+    ax[1].legend(loc='upper left')
+    ax[1].set_title('Inhibitory Weights')
     
-    ax2=ax.twinx()
-    ax2.plot(t_ls,output,color='black',linewidth=2,label='output')
+    #plt.plot(t_ls,h_avg,label='$h$')
+    ax[2].plot(t_ls,f_avg,label='$\\nu_1$')
+    ax[2].plot(t_ls,f_avg2,label='$\\nu_2$')
+    ax[2].plot(t_ls,f_avg2,label='$\\nu_i$')
+    ax[2].legend(loc='upper right')
+    ax[2].set_title('Firing Rate Averages In Each Cortex')
     
-    plt.legend(loc='upper right')
+    fig, axs = plt.subplots()
+    c = axs.pcolormesh(We+Wi, cmap='RdBu', vmin=np.nanmin(We+Wi), vmax=np.nanmax(We+Wi))
+    fig.colorbar(c, ax=axs)
     plt.show()
-    
-    #neuron_weight_plot(all_weights,save_dir='')
