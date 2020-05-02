@@ -166,7 +166,7 @@ def learn(rule,E,W,f,gamma,dt,theta,tau_t):
     return W,E,theta
 
 
-def input_manipulation(rule,I,i,nt,shutoff_time,turnon_time):
+def input_manipulation(rule,I,i,nt,shutoff_time,turnon_time,frequency=1):
     if rule=='fixed shutoff':
         if i>=nt*shutoff_time:
             I[:half_n]=0
@@ -178,9 +178,23 @@ def input_manipulation(rule,I,i,nt,shutoff_time,turnon_time):
             I[:half_n]=1
             
     elif rule=='sin':
-        pass
-    elif rule=='cos':           
-        pass
+        # I.e. start in the "on" state
+        angle = (np.pi*2*i*frequency)/nt
+        I[:half_n]=round((np.sin(angle)+1)/2)
+    
+    elif rule=='inv_sin':
+        # Inverted sine, i.e. start in the "off" state
+        angle = (np.pi*2*i*frequency)/nt
+        I[:half_n]=round(((-1)*np.sin(angle)+1)/2)
+        
+    elif rule=='cos':
+        # I.e. offset sine
+        angle = (np.pi*2*i*frequency)/nt
+        I[:half_n]=round((np.cos(angle)+1)/2)
+    
+    elif rule=='damped':
+        angle = (np.pi*2*(1.0005**i)*frequency)/nt
+        I[:half_n]=round((np.sin(angle)+1)/2)
     
     return I
 
@@ -260,7 +274,7 @@ if __name__ == "__main__":
     output = np.zeros((nt,1))
     
     weight_update_rules = ['oja', 'bcm', 'cov', 'pattern']
-    input_rules = ['fixed shutoff','shutoff recovery','sin','cos']
+    input_rules = ['fixed shutoff','shutoff recovery','sin','inv_sin','cos','damped']
 
     # Rate to print graphml files
     output_gephi = False
