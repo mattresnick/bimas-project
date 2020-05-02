@@ -246,6 +246,7 @@ if __name__ == "__main__":
     I2 = 9
     shutoff_time = 0.25 # % of the way through training when input is shut off.
     turnon_time = 0.9 # % of the way through training when input is turned back on.
+    frequency=4 # Number of full sinusoidal input fluctuations per training run.
     
     R = 1 # Resistance
     # time parameters
